@@ -13,26 +13,8 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 client = OpenAI(api_key = OPENAI_API_KEY)
 
-"""
-response = client.responses.create(
-    model="gpt-4o",
-    input = [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "input_file",
-                    "file_id": file.id,
-                },
-                {
-                    "type": "input_text",
-                    "text": "Divide this conspect into 10 questions.",
-                },
-            ]
-        }
-    ]
-)
-"""
+
+
 
 app = FastAPI()
 
@@ -62,16 +44,19 @@ async def analize(file: UploadFile | None = None):
         reader = PdfReader(file.file)
         first_page = reader.pages[0]
         text = first_page.extract_text() or ""
+        
 
-        return {
-            "filename": file.filename,
-            "first_page_text": text,
-            "pages": len(reader.pages),
-        }
+        response = client.responses.create(
+            model="gpt-4o",
+            input = text,
+            instructions="Make 10 questions from the following text."
+        )
+
+        return response.output_text
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to read PDF: {e}")
 
-
+    
     
 
 
