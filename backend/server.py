@@ -5,6 +5,7 @@ import os
 from os.path import join, dirname
 from dotenv import load_dotenv
 from pypdf import PdfReader
+from fastapi.responses import StreamingResponse
 
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path)
@@ -40,27 +41,33 @@ async def analize(file: UploadFile | None = None):
     if not file:
         return {"message": "No upload file sent"}
     
-    try:
-        reader = PdfReader(file.file)
-        first_page = reader.pages[0]
-        text = first_page.extract_text() or ""
-        
+    reader = PdfReader(file.file)
+    first_page = reader.pages[0]
+    text = first_page.extract_text() or ""
+    
 
-        response = client.responses.create(
+
+    def gen():
+        headers = []
+        with client.responses.create(
             model="gpt-4o",
             input = text,
-            instructions="Make 10 questions from the following text."
-        )
-
-        return response.output_text
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to read PDF: {e}")
-
-    
-    
-
-
+            instructions="Make 10 questions from the following text.",
+            stream=True
+        ) as stream:
+            for event in stream:
+                if event.type=="response.output_text.delta":
+                    yield f"data: {event.delta}\n\n"
+                elif event.type=="response.completed":
+                    yield f"event: done\n data: [DONE]\n\n"
     
 
-    print(file)
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    )
 
